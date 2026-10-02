@@ -87,7 +87,7 @@
     function App() {
       const [currentLevelIndex, setCurrentLevelIndex] = useState(0);
       const [userInput, setUserInput] = useState("");
-      const [feedback, setFeedback] = useState({ type: "", message: "" });
+      const [feedback, setFeedback] = useState({ type: "", message: "", diff: null });
       const [isCompleted, setIsCompleted] = useState(false);
       const [showSuccessModal, setShowSuccessModal] = useState(false);
       
@@ -108,7 +108,49 @@
         }
       }, [currentLevelIndex]);
 
-      // 檢查邏輯 (大幅增強：全形字偵測、標點空格、一逗到底、大小寫提示)
+      // LCS 逐字精準比對 (生成錯誤紅色標記與漏字標記)
+      const computeDiff = (inputStr, targetStr) => {
+        const n = inputStr.length;
+        const m = targetStr.length;
+        const dp = Array.from({ length: n + 1 }, () => new Int32Array(m + 1));
+
+        for (let i = 0; i < n; i++) {
+          for (let j = 0; j < m; j++) {
+            const c1 = inputStr[i].replace(/[’‘`]/g, "'");
+            const c2 = targetStr[j].replace(/[’‘`]/g, "'");
+            if (c1 === c2) {
+              dp[i + 1][j + 1] = dp[i][j] + 1;
+            } else {
+              dp[i + 1][j + 1] = Math.max(dp[i + 1][j], dp[i][j + 1]);
+            }
+          }
+        }
+
+        let i = n, j = m;
+        const result = [];
+        while (i > 0 || j > 0) {
+          if (i > 0 && j > 0) {
+            const c1 = inputStr[i - 1].replace(/[’‘`]/g, "'");
+            const c2 = targetStr[j - 1].replace(/[’‘`]/g, "'");
+            if (c1 === c2) {
+              result.unshift({ type: 'correct', char: inputStr[i - 1] });
+              i--;
+              j--;
+              continue;
+            }
+          }
+          if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+            result.unshift({ type: 'missing', char: targetStr[j - 1] });
+            j--;
+          } else if (i > 0) {
+            result.unshift({ type: 'wrong', char: inputStr[i - 1] });
+            i--;
+          }
+        }
+        return result;
+      };
+
+      // 檢查邏輯 (大幅增強：全形字偵測、標點空格、一逗到底、大小寫提示與逐字紅字標示)
       const checkAnswer = () => {
         const target = currentLevel.sentence;
         const input = userInput;
@@ -128,10 +170,13 @@
           if (typeof confetti === "function") {
             confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
           }
-          setFeedback({ type: "success", message: "🎉 完全正確！標點、空格與大小寫完美無瑕！(Correct!)" });
+          setFeedback({ type: "success", message: "🎉 完全正確！標點、空格與大小寫完美無瑕！(Correct!)", diff: null });
           setShowSuccessModal(true);
           return;
         }
+
+        // 計算逐字紅字與漏字標記
+        const diff = computeDiff(input, target);
 
         // 2. 智慧錯誤偵測 (由嚴重到輕微依序過濾)
 
@@ -140,7 +185,8 @@
         if (fullWidthRegex.test(input)) {
           setFeedback({
             type: "error",
-            message: "❌ 偵測到「全形字元」！請切換為英數半形輸入。（Windows 用戶若誤觸請按 Shift + Space 切回半形；平板請切至純英文鍵盤）"
+            message: "❌ 偵測到「全形字元」！請切換為英數半形輸入。（Windows 用戶若誤觸請按 Shift + Space 切回半形；平板請切至純英文鍵盤）",
+            diff
           });
           return;
         }
@@ -149,7 +195,8 @@
         if (/ [,.?!;:]/.test(input)) {
           setFeedback({
             type: "error",
-            message: "❌ 標點符號前面「不能」有空格！請緊緊貼著前一個單字的最後一個字母。"
+            message: "❌ 標點符號前面「不能」有空格！請緊緊貼著前一個單字的最後一個字母。",
+            diff
           });
           return;
         }
@@ -158,7 +205,8 @@
         if (/[,.?!;:](?=[a-zA-Z0-9])/.test(input)) {
           setFeedback({
             type: "error",
-            message: "❌ 標點符號後面「必須空一格」再打下一個字！請檢查逗號、句號或冒號後面是否有敲 Space 空白鍵。"
+            message: "❌ 標點符號後面「必須空一格」再打下一個字！請檢查逗號、句號或冒號後面是否有敲 Space 空白鍵。",
+            diff
           });
           return;
         }
@@ -167,7 +215,8 @@
         if (/  /.test(input)) {
           setFeedback({
             type: "error",
-            message: "❌ 單字之間只要「空一格」就好，請勿按多次空白鍵。"
+            message: "❌ 單字之間只要「空一格」就好，請勿按多次空白鍵。",
+            diff
           });
           return;
         }
@@ -176,7 +225,8 @@
         if (normalizeForCompare(input).toLowerCase() === normalizeForCompare(target).toLowerCase()) {
           setFeedback({
             type: "error",
-            message: "⚠️ 內容很接近了！但有「大小寫」不符。請檢查句首字母、專有名詞（如 Friday）或角色名稱。"
+            message: "⚠️ 內容很接近了！但有「大小寫」不符。請檢查句首字母、專有名詞（如 Friday）或角色名稱。",
+            diff
           });
           return;
         }
@@ -185,7 +235,8 @@
         if (input.length < target.length * 0.75) {
           setFeedback({
             type: "warning",
-            message: "💪 加油，請把完整的句子打完再點檢查喔。"
+            message: "💪 加油，請把完整的句子打完再點檢查喔。",
+            diff
           });
           return;
         }
@@ -193,13 +244,14 @@
         // (G) 檢查：其他拼字或漏字錯誤
         setFeedback({
           type: "error",
-          message: "🤔 還有部分單字拼錯或符號不相符喔，請仔細對照上方的黃色目標句子！"
+          message: "🤔 還有部分單字拼錯或符號不相符喔，請參考下方「紅色錯誤標示」與上方黃色目標句子！",
+          diff
         });
       };
 
       const handleNextLevel = () => {
         setShowSuccessModal(false);
-        setFeedback({ type: "", message: "" });
+        setFeedback({ type: "", message: "", diff: null });
         setUserInput("");
         
         if (currentLevelIndex < levels.length - 1) {
@@ -403,7 +455,7 @@
                 value={userInput}
                 onChange={(e) => {
                   setUserInput(e.target.value);
-                  setFeedback({ type: "", message: "" });
+                  setFeedback({ type: "", message: "", diff: null });
                 }}
                 onKeyDown={(e) => {
                   // 按 Enter 直接觸發檢查
@@ -413,7 +465,11 @@
                   }
                 }}
                 placeholder="請在此處打字...（打完可直接按 Enter 或點擊下方檢查）"
-                className="typing-font w-full p-4 text-lg sm:text-2xl border-2 border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition resize-none h-28 sm:h-32 shadow-inner"
+                className={`typing-font w-full p-4 text-lg sm:text-2xl border-2 rounded-xl focus:outline-none transition resize-none h-28 sm:h-32 shadow-inner ${
+                  feedback.type === 'error'
+                    ? 'border-red-400 ring-2 ring-red-200 bg-red-50/20'
+                    : 'border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-transparent'
+                }`}
                 spellCheck="false"
                 autoComplete="off"
                 autoCapitalize="off"
@@ -427,15 +483,75 @@
             {/* Hints & Feedback Display */}
             <div className="min-h-[72px] mb-6">
               {feedback.message ? (
-                <div className={`p-3.5 sm:p-4 rounded-xl flex items-start text-xs sm:text-sm font-medium shadow-sm transition-all ${
-                  feedback.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 
-                  feedback.type === 'warning' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 
+                <div className={`p-4 rounded-xl text-xs sm:text-sm font-medium shadow-sm transition-all ${
+                  feedback.type === 'error' ? 'bg-red-50 text-red-800 border border-red-200' : 
+                  feedback.type === 'warning' ? 'bg-amber-50 text-amber-800 border border-amber-200' : 
                   'bg-emerald-50 text-emerald-800 border border-emerald-200'
                 }`}>
-                  <span className="mr-2 text-base flex-shrink-0">
-                    {feedback.type === 'error' ? '⚠️' : feedback.type === 'warning' ? '💡' : '✅'}
-                  </span>
-                  <span className="leading-relaxed">{feedback.message}</span>
+                  <div className="flex items-start">
+                    <span className="mr-2 text-base flex-shrink-0">
+                      {feedback.type === 'error' ? '⚠️' : feedback.type === 'warning' ? '💡' : '✅'}
+                    </span>
+                    <span className="leading-relaxed font-semibold">{feedback.message}</span>
+                  </div>
+
+                  {/* 逐字紅字標示錯誤區 */}
+                  {feedback.diff && feedback.diff.length > 0 && (
+                    <div className="mt-3.5 p-3.5 bg-white rounded-xl border border-red-200 shadow-sm">
+                      <div className="text-[11px] font-bold text-gray-500 mb-2 flex flex-wrap items-center justify-between gap-1">
+                        <span className="flex items-center gap-1 font-sans">🔍 錯誤精準定位（對照檢視）：</span>
+                        <div className="flex items-center gap-3 text-[11px] font-sans">
+                          <span className="inline-flex items-center gap-1 text-red-600 font-semibold">
+                            <span className="w-2.5 h-2.5 rounded bg-red-500 inline-block"></span>
+                            紅色＝打錯 / 多打 / 全形
+                          </span>
+                          <span className="inline-flex items-center gap-1 text-amber-600 font-semibold">
+                            <span className="w-2.5 h-2.5 rounded bg-amber-400 inline-block"></span>
+                            黃色＝漏打
+                          </span>
+                        </div>
+                      </div>
+                      <div className="typing-font text-base sm:text-xl tracking-wide leading-loose p-2.5 bg-gray-50 rounded-lg border border-gray-200 flex flex-wrap items-center">
+                        {feedback.diff.map((item, idx) => {
+                          if (item.type === 'correct') {
+                            return (
+                              <span key={idx} className="text-gray-800">
+                                {item.char}
+                              </span>
+                            );
+                          } else if (item.type === 'wrong') {
+                            const isFull = /[！，。？；：【】（）“”‘’Ａ-Ｚａ-ｚ０-９]/.test(item.char);
+                            return (
+                              <span 
+                                key={idx} 
+                                className={`text-white font-bold px-1.5 py-0.5 rounded mx-0.5 shadow-sm inline-flex items-center ${
+                                  isFull ? 'bg-red-600 ring-2 ring-red-300 animate-pulse' : 'bg-red-500'
+                                }`} 
+                                title={isFull ? "全形字元！請切換半形" : item.char === ' ' ? "此處不該有空格" : `打錯字元: ${item.char}`}
+                              >
+                                {item.char === ' ' ? '␣(多空格)' : item.char}
+                              </span>
+                            );
+                          } else if (item.type === 'missing') {
+                            return (
+                              <span 
+                                key={idx} 
+                                className="bg-amber-100 text-amber-800 border-2 border-dashed border-amber-400 font-bold px-1.5 py-0.5 rounded mx-0.5 inline-flex items-center shadow-xs" 
+                                title={item.char === ' ' ? "漏打空格！標點後請空一格" : `漏打字元: ${item.char}`}
+                              >
+                                {item.char === ' ' ? '␣(缺空)' : item.char}
+                              </span>
+                            );
+                          }
+                          return null;
+                        })}
+                      </div>
+                      <div className="mt-2 text-[11px] text-gray-500 flex items-center justify-between font-sans">
+                        <span>💡 將滑鼠移至有顏色的字元上方可查看詳細提示</span>
+                        <span className="text-indigo-600 font-medium">修改後按 Enter 或點檢查重測</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="p-3.5 sm:p-4 bg-gray-50 border border-gray-200 rounded-xl text-gray-500 text-xs sm:text-sm flex items-start">
