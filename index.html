@@ -79,8 +79,8 @@
         id: 6,
         title: "Level 6: Script Line Format (劇本角色台詞)",
         theme: "Google Docs 共編標準格式",
-        sentence: "Mechanic (Tom): Dont worry! We can give you a free estimate.",
-        hint: "終極挑戰：角色與姓名括號格式、冒號 (:) 後空一格、驚嘆號 (!) 後空一格！"
+        sentence: "Mechanic (Tom): Don't worry! We can give you a free estimate.",
+        hint: "終極挑戰：角色與姓名括號格式、冒號 (:) 後空一格、縮寫 (') 與驚嘆號 (!) 空格！"
       }
     ];
 
@@ -113,13 +113,17 @@
         const target = currentLevel.sentence;
         const input = userInput;
 
-        // 1. 完全正確比對 (支援直/彎單引號、Dont/Don't 與驚嘆號後空格/大小寫彈性)
-        const normalizeStr = (str) => str.trim().replace(/[’‘]/g, "'");
-        const cleanForCompare = (str) => normalizeStr(str)
-          .replace(/don't/gi, "dont")
-          .replace(/!\s+we/gi, "! we");
+        // 1. 完全正確比對 (支援直/彎單引號、Dont/Don't 與驚嘆號後大小寫寬容)
+        const normalizeForCompare = (str) => {
+          return str
+            .trim()
+            .replace(/[’‘`]/g, "'")
+            .replace(/don't/gi, "don't")
+            .replace(/dont/gi, "don't")
+            .replace(/!\s+we/gi, "! We");
+        };
 
-        if (input === target || cleanForCompare(input) === cleanForCompare(target)) {
+        if (input === target || normalizeForCompare(input) === normalizeForCompare(target)) {
           // 觸發彩帶特效
           if (typeof confetti === "function") {
             confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
@@ -169,7 +173,7 @@
         }
 
         // (E) 檢查：大小寫不符 (利用轉小寫比對)
-        if (input.toLowerCase() === target.toLowerCase()) {
+        if (normalizeForCompare(input).toLowerCase() === normalizeForCompare(target).toLowerCase()) {
           setFeedback({
             type: "error",
             message: "⚠️ 內容很接近了！但有「大小寫」不符。請檢查句首字母、專有名詞（如 Friday）或角色名稱。"
