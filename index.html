@@ -79,8 +79,8 @@
         id: 6,
         title: "Level 6: Script Line Format (劇本角色台詞)",
         theme: "Google Docs 共編標準格式",
-        sentence: "Mechanic (Tom): Don't worry, we can give you a free estimate.",
-        hint: "終極挑戰：角色與姓名括號格式、冒號 (:) 後空一格、縮寫 (') 與逗號空格！"
+        sentence: "Mechanic (Tom): Dont worry! We can give you a free estimate.",
+        hint: "終極挑戰：角色與姓名括號格式、冒號 (:) 後空一格、驚嘆號 (!) 後空一格！"
       }
     ];
 
@@ -113,8 +113,13 @@
         const target = currentLevel.sentence;
         const input = userInput;
 
-        // 1. 完全正確
-        if (input === target) {
+        // 1. 完全正確比對 (支援直/彎單引號、Dont/Don't 與驚嘆號後空格/大小寫彈性)
+        const normalizeStr = (str) => str.trim().replace(/[’‘]/g, "'");
+        const cleanForCompare = (str) => normalizeStr(str)
+          .replace(/don't/gi, "dont")
+          .replace(/!\s+we/gi, "! we");
+
+        if (input === target || cleanForCompare(input) === cleanForCompare(target)) {
           // 觸發彩帶特效
           if (typeof confetti === "function") {
             confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } });
@@ -439,7 +444,7 @@
             {/* Action Buttons */}
             <div className="flex justify-between items-center pt-2 border-t border-gray-100">
               <span className="text-xs text-gray-400 hidden sm:inline">
-                按鍵秘訣：標點符號後請敲擊一次 Spacebar 空格
+                按鍵秘訣：標點符號請緊接著前一字母，後面請敲擊一次 Spacebar 空格
               </span>
               <button
                 onClick={checkAnswer}
